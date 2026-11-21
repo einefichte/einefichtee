@@ -1,3 +1,4 @@
+
 import ElasticMesh from '../components/ElasticMesh';
 
 function About() {
@@ -30,9 +31,14 @@ function About() {
           <br />
           Deswegen habe ich diese Webseite gemacht.
           <br />
-          Vorschläge gerne  
-          <a href="https://forms.cloud.microsoft/r/p5skY4Th7V"> hier</a>
-         
+          Ich mache gerne Musik 
+          <br />
+          Unten ist eins von meinen Liedern( RRRRRR Phonk)
+          <br />
+          Vorschläge gerne
+          <a href="https://forms.cloud.microsoft/r/p5skY4Th7V">
+            {' '}hier
+          </a>
         </p>
       </div>
 
@@ -52,6 +58,39 @@ function About() {
           material="clay"
           intro={true}
         />
+      </div>
+
+      {/* Music Player */}
+      <div
+        style={{
+          width: '400px',
+          maxWidth: '90vw',
+          marginTop: '30px',
+          padding: '20px',
+          background: 'rgba(255,255,255,0.05)',
+          border: '1px solid rgba(255,255,255,0.15)',
+          borderRadius: '12px',
+          zIndex: 2,
+          boxSizing: 'border-box'
+        }}
+      >
+        <h2 style={{ textAlign: 'center' }}>
+          MY MUSIC
+        </h2>
+
+        <audio
+          controls
+          preload="metadata"
+          style={{
+            width: '100%'
+          }}
+        >
+          <source
+            src="/music/Drift Phonk.mp3"
+            type="audio/mpeg"
+          />
+          Dein Browser unterstützt keine Audiowiedergabe.
+        </audio>
       </div>
     </div>
   );
