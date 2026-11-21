@@ -1,5 +1,4 @@
-
-import Topography from '../components/Topography';
+import Topograpy from '../components/Topography';
 
 function Home() {
   return (

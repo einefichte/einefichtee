@@ -30,12 +30,12 @@ function Home() {
           color: 'transparent',
           WebkitTextStroke: '1.5px white',
           fontSize: '68px',
-          fontFamily: 'OXYGENE1',
+          fontFamily: 'OXYGENE1.TTF',
           textAlign: 'center',
           zIndex: 2
         }}
       >
-       HALLO
+       EINEFICHTE
       </h1>
     </div>
   );
