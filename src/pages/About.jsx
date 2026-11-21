@@ -30,8 +30,9 @@ function About() {
           <br />
           Deswegen habe ich diese Webseite gemacht.
           <br />
-          Leider goone ich alle 10 Minuten.
-          <br /> Mein tuffer Sigmabruder ist besser als Magnus Carlsen.
+          Vorschläge gerne  
+          <a href="https://forms.cloud.microsoft/r/p5skY4Th7V"> hier</a>
+         
         </p>
       </div>
 
