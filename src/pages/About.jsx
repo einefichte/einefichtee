@@ -1,5 +1,4 @@
-
-import ElectricLogo from '../components/ElectricLogo';
+import ElasticMesh from '../components/ElasticMesh';
 
 function About() {
   return (
@@ -8,38 +7,12 @@ function About() {
         position: 'relative',
         minHeight: '600px',
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         padding: '40px'
       }}
     >
-      {/* ElectricLogo links */}
-      <div
-        style={{
-          position: 'absolute',
-          left: '5%',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          width: '400px',
-          height:"450px"
-          
-        }}
-      >
-      
-        
-        <ElectricLogo
-          src="favicon.svg"
-          color="#4fff67"
-          glowColor="#4fff67"
-          scale={1}
-          strands={6}
-          speed={2.5}
-          interactive
-          glow={1}
-        />
-      </div>
-
-      {/* Text bleibt in der Mitte */}
       <div
         style={{
           textAlign: 'center',
@@ -48,7 +21,6 @@ function About() {
         }}
       >
         <h1>ABOUT</h1>
-
         <p>
           Hier erfährst du mehr über mich und mein Projekt.
           <br />
@@ -58,6 +30,24 @@ function About() {
           <br />
           Deswegen habe ich diese Webseite gemacht.
         </p>
+      </div>
+
+      <div
+        style={{
+          width: '750px',
+          maxWidth: '90vw',
+          height: '300px',
+          marginTop: '30px'
+        }}
+      >
+        <ElasticMesh
+          text="EINEFICHTE"
+          fontFamily="Oxygene1"
+          fontWeight={900}
+          color="#00ff80"
+          material="clay"
+          intro={true}
+        />
       </div>
     </div>
   );
