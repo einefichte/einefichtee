@@ -30,7 +30,7 @@ function Home() {
           color: 'transparent',
           WebkitTextStroke: '1.5px white',
           fontSize: '68px',
-          fontFamily: 'OXYGENE1.TTF',
+          fontFamily: 'OXYGENE1',
           textAlign: 'center',
           zIndex: 2
         }}
