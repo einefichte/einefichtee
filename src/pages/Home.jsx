@@ -11,7 +11,7 @@ function Home() {
       <Topography
         color="#4f7cff"
         lineCount={22}
-        speed={0.25}
+        speed={5}
       />
 
       <h1 style={{
@@ -26,7 +26,7 @@ function Home() {
         textAlign: 'center',
         zIndex: 2
       }}>
-        HELLO
+        VERITY
       </h1>
     </div>
   );
