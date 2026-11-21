@@ -29,6 +29,9 @@ function About() {
           Ich spiele auch gerne Minecraft und bin sehr an programmmieren interessiert.
           <br />
           Deswegen habe ich diese Webseite gemacht.
+          <br />
+          Leider goone ich alle 10 Minuten.
+          <br /> Mein tuffer Sigmabruder ist besser als Magnus Carlsen.
         </p>
       </div>
 

@@ -9,7 +9,7 @@ function Home() {
     }}>
       <Topography
         color="#4f7cff"
-        lineCount={22}
+        lineCount={222}
         speed={5}
       />
 
