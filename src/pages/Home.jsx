@@ -26,7 +26,8 @@ function Home() {
         textAlign: 'center',
         zIndex: 2
       }}>
-        VERITY
+        EINEFICHTE
+
       </h1>
     </div>
   );
