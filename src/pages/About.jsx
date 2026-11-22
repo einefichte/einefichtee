@@ -33,7 +33,7 @@ function About() {
           <br />
           Ich mache gerne Musik 
           <br />
-          Unten ist eins von meinen Liedern( RRRRRR Phonk)
+          Unten ist eins von meinen Liedern
           <br />
           Vorschläge gerne
           <a href="https://forms.cloud.microsoft/r/p5skY4Th7V">
@@ -55,7 +55,7 @@ function About() {
           fontFamily="Oxygene1"
           fontWeight={900}
           color="#00ff80"
-          material="clay"
+          material="clay" 
           intro={true}
         />
       </div>

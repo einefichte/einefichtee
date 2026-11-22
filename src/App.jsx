@@ -5,6 +5,7 @@ import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import Topography from './components/Topography';
 import About from './pages/About';
 import Contact from './pages/Contact';
+import Game from './pages/Game';
 
 function Home() {
   return (
@@ -35,7 +36,7 @@ function Home() {
           zIndex: 2
         }}
       >
-       EINEFICHTE
+        EINEFICHTE
       </h1>
     </div>
   );
@@ -66,6 +67,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/game" element={<Game />} />
         </Routes>
       </main>
     </BrowserRouter>
@@ -73,4 +75,3 @@ function App() {
 }
 
 export default App;
-

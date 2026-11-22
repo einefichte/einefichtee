@@ -23,15 +23,16 @@ function Contact() {
         }}
       >
         <FluidGlass
-          text="Einefichte"
+          text="EINEFICHTE"
+          fontFamily="OXYGENE1"
           src="/hero.jpg"
           shape="cube"
           size={420}
           refraction={2}
-          dispersion={1}
+          dispersion={100}
           interaction="follow"
           frost={0}
-          color="#ffffff"
+          color="#ff0000"
           tint={0}
           reflection={1}
           shadow={0.5}
