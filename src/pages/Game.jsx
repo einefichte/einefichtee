@@ -20,13 +20,54 @@ const BLOCKS = [
   { id: 'bedrock', name: 'Grundgestein', color: '#333333' },
   { id: 'oak_log', name: 'Eichenstamm', color: '#966033' },
   { id: 'moss', name: 'Moos', color: '#527d42' },
+
+  // 30 neue Dekoblöcke
+  { id: 'glass_blue', name: 'Blaues Glas', color: '#62a9df' },
+  { id: 'glass_green', name: 'Grünes Glas', color: '#65bd83' },
+  { id: 'glass_purple', name: 'Lila Glas', color: '#a77bd4' },
+  { id: 'white_wool', name: 'Weiße Wolle', color: '#eeeeee' },
+  { id: 'black_wool', name: 'Schwarze Wolle', color: '#292929' },
+  { id: 'red_wool', name: 'Rote Wolle', color: '#bd3939' },
+  { id: 'blue_wool', name: 'Blaue Wolle', color: '#355ca8' },
+  { id: 'yellow_wool', name: 'Gelbe Wolle', color: '#e8ca42' },
+  { id: 'orange_wool', name: 'Orange Wolle', color: '#df812e' },
+  { id: 'purple_wool', name: 'Lila Wolle', color: '#8756b8' },
+  { id: 'white_concrete', name: 'Weißer Beton', color: '#deded8' },
+  { id: 'black_concrete', name: 'Schwarzer Beton', color: '#242424' },
+  { id: 'red_concrete', name: 'Roter Beton', color: '#a52d28' },
+  { id: 'blue_concrete', name: 'Blauer Beton', color: '#315d9b' },
+  { id: 'yellow_concrete', name: 'Gelber Beton', color: '#d9b52e' },
+  { id: 'bookshelf', name: 'Bücherregal', color: '#95663d' },
+  { id: 'lantern', name: 'Laterne', color: '#e9a83d' },
+  { id: 'glowstone', name: 'Leuchtstein', color: '#e8d17b' },
+  { id: 'terracotta', name: 'Terrakotta', color: '#b76c50' },
+  { id: 'marble', name: 'Marmor', color: '#d7d7d7' },
+  { id: 'copper', name: 'Kupfer', color: '#bd7951' },
+  { id: 'brick_white', name: 'Helle Ziegel', color: '#d5c7b4' },
+  { id: 'dark_wood', name: 'Dunkles Holz', color: '#49301e' },
+  { id: 'oak_leaves', name: 'Eichenlaub', color: '#668d3c' },
+  { id: 'flower_pink', name: 'Rosa Blütenblock', color: '#e68bb5' },
+  { id: 'flower_blue', name: 'Blaue Blüten', color: '#6595d8' },
+  { id: 'mossy_stone', name: 'Bemooster Stein', color: '#607b50' },
+  { id: 'dark_bricks', name: 'Dunkle Ziegel', color: '#49434b' },
+  { id: 'cream', name: 'Cremeblock', color: '#e6d5ae' },
+  { id: 'lavender', name: 'Lavendelblock', color: '#a995c9' },
 ];
 
 const HOTBAR_SIZE = 9;
 
 function Game() {
   const mountRef = useRef(null);
+  const actionRef = useRef({});
+  const movementRef = useRef({ x: 0, y: 0 });
+  const jumpRef = useRef(false);
+  const lookPointerRef = useRef(null);
+
   const [selectedSlot, setSelectedSlot] = useState(0);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [joystick, setJoystick] = useState({ x: 0, y: 0 });
+
   const selectedSlotRef = useRef(0);
 
   function chooseSlot(index) {
@@ -36,8 +77,25 @@ function Game() {
   }
 
   useEffect(() => {
+    const detectDevice = () => {
+      setIsMobile(
+        window.matchMedia('(pointer: coarse)').matches ||
+        window.innerWidth < 800
+      );
+    };
+
+    detectDevice();
+    window.addEventListener('resize', detectDevice);
+
+    return () => window.removeEventListener('resize', detectDevice);
+  }, []);
+
+  useEffect(() => {
     const mount = mountRef.current;
     if (!mount) return;
+
+    const mobile = window.matchMedia('(pointer: coarse)').matches ||
+      window.innerWidth < 800;
 
     const CHUNK_SIZE = 16;
     const RENDER_DISTANCE = 2;
@@ -50,7 +108,6 @@ function Game() {
     const PLAYER_HEIGHT = 1.8;
     const EYE_HEIGHT = 1.7;
 
-    // Szene
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87b8d8);
     scene.fog = new THREE.Fog(0x87b8d8, 35, 100);
@@ -71,30 +128,24 @@ function Game() {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.2;
 
+    renderer.domElement.style.touchAction = 'none';
     mount.appendChild(renderer.domElement);
 
-    // Steuerung
-    const controls = new PointerLockControls(
-      camera,
-      renderer.domElement
-    );
-
+    const controls = new PointerLockControls(camera, renderer.domElement);
     controls.pointerSpeed = 1;
 
+    let mobilePlaying = mobile;
+    let pitch = 0;
+    let yaw = 0;
+
     const onCanvasClick = () => {
-      if (!controls.isLocked) controls.lock();
+      if (!mobile && !controls.isLocked) controls.lock();
     };
 
     renderer.domElement.addEventListener('click', onCanvasClick);
 
-    // Licht
-    const ambient = new THREE.HemisphereLight(
-      0xc4ddff,
-      0x42502c,
-      2
-    );
-
-    scene.add(ambient);
+    // Beleuchtung
+    scene.add(new THREE.HemisphereLight(0xc4ddff, 0x42502c, 2));
 
     const sun = new THREE.DirectionalLight(0xffe5b5, 3);
     sun.position.set(30, 50, 20);
@@ -104,31 +155,26 @@ function Game() {
     sun.shadow.camera.right = 40;
     sun.shadow.camera.top = 40;
     sun.shadow.camera.bottom = -40;
-
     scene.add(sun);
 
-    // Texturen
+    // Blocktexturen
     function createTexture(baseColor, detailColor, detail = 700) {
       const size = 128;
       const canvas = document.createElement('canvas');
-
       canvas.width = size;
       canvas.height = size;
 
       const ctx = canvas.getContext('2d');
-
       ctx.fillStyle = baseColor;
       ctx.fillRect(0, 0, size, size);
 
       for (let i = 0; i < detail; i++) {
         ctx.globalAlpha = 0.08 + Math.random() * 0.2;
         ctx.fillStyle = detailColor;
-
         const x = Math.random() * size;
         const y = Math.random() * size;
         const w = 2 + Math.random() * 8;
         const h = 2 + Math.random() * 8;
-
         ctx.fillRect(x, y, w, h);
       }
 
@@ -139,135 +185,94 @@ function Game() {
       texture.magFilter = THREE.NearestFilter;
       texture.minFilter = THREE.NearestMipmapNearestFilter;
       texture.generateMipmaps = true;
-
       return texture;
     }
 
-    const textureSettings = {
-      grass: ['#579447', '#294e24'],
-      dirt: ['#795338', '#422a19'],
-      stone: ['#858585', '#414141'],
-      cobblestone: ['#666666', '#303030'],
-      sand: ['#d9c27c', '#a48c50'],
-      wood: ['#80502c', '#452b18'],
-      leaves: ['#347a36', '#17451d'],
-      planks: ['#bd8950', '#80552e'],
-      bricks: ['#a94d3b', '#663126'],
-      glass: ['#a8dce8', '#d9f8ff'],
-      snow: ['#e9f4fa', '#b9d4e2'],
-      gold: ['#e5bd35', '#96751a'],
-      diamond: ['#39d5d0', '#167c85'],
-      bedrock: ['#333333', '#111111'],
-      oak_log: ['#966033', '#59371e'],
-      moss: ['#527d42', '#274421'],
-    };
-
-    const materials = {};
     const textures = {};
+    const materials = {};
 
     for (const block of BLOCKS) {
-      const [base, detail] = textureSettings[block.id];
-      const texture = createTexture(base, detail);
+      const base = new THREE.Color(block.color);
+      const detail = base.clone().multiplyScalar(0.48);
+
+      const texture = createTexture(
+        block.color,
+        `#${detail.getHexString()}`,
+        block.id.includes('wool') ? 250 : 700
+      );
 
       textures[block.id] = texture;
 
+      const isGlass = block.id.includes('glass');
+
       materials[block.id] = new THREE.MeshStandardMaterial({
         map: texture,
-        roughness: block.id === 'gold' ? 0.35 : 0.95,
-        metalness: block.id === 'gold' ? 0.45 : 0,
-        transparent: block.id === 'glass',
-        opacity: block.id === 'glass' ? 0.38 : 1,
+        roughness: block.id === 'gold' || block.id === 'copper' ? 0.35 : 0.95,
+        metalness: block.id === 'gold' || block.id === 'copper' ? 0.45 : 0,
+        transparent: isGlass,
+        opacity: isGlass ? 0.42 : 1,
       });
     }
 
     const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
 
-    // Terrain
+    // Welt
     function terrainHeight(x, z) {
       const a = Math.sin(x * 0.12) * 2;
       const b = Math.cos(z * 0.14) * 2;
       const c = Math.sin((x + z) * 0.08) * 1.5;
       const d = Math.cos((x - z) * 0.05) * 1.5;
-
       return Math.max(1, Math.floor(4 + a + b + c + d));
     }
 
-    function chunkKey(cx, cz) {
-      return `${cx},${cz}`;
-    }
-
-    function blockKey(x, y, z) {
-      return `${x},${y},${z}`;
-    }
+    const chunkKey = (x, z) => `${x},${z}`;
+    const blockKey = (x, y, z) => `${x},${y},${z}`;
 
     const removedBlocks = new Set();
     const placedBlocks = new Map();
     const chunks = new Map();
-
     const worldBlocks = new Map();
 
     let chunkMeshes = [];
 
-    // Zufall mit festem Ergebnis
     function hash(x, z) {
-      const value =
-        Math.sin(x * 127.1 + z * 311.7) * 43758.5453;
-
+      const value = Math.sin(x * 127.1 + z * 311.7) * 43758.5453;
       return value - Math.floor(value);
     }
 
     function isTreePosition(x, z) {
-      return (
-        hash(x, z) > 0.975 &&
-        hash(x + 17, z - 9) > 0.2
-      );
+      return hash(x, z) > 0.975 && hash(x + 17, z - 9) > 0.2;
     }
 
-    // Blöcke eines Chunks generieren
     function generateChunkBlocks(cx, cz) {
       const result = {};
 
-      for (const block of BLOCKS) {
-        result[block.id] = [];
-      }
+      for (const block of BLOCKS) result[block.id] = [];
 
       const startX = cx * CHUNK_SIZE;
       const startZ = cz * CHUNK_SIZE;
 
       function addBlock(x, y, z, type) {
         const key = blockKey(x, y, z);
-
         if (removedBlocks.has(key)) return;
 
-        const placed = placedBlocks.get(key);
-        const finalType = placed || type;
-
-        if (!result[finalType]) return;
-
-        result[finalType].push({ x, y, z });
+        const finalType = placedBlocks.get(key) || type;
+        if (result[finalType]) result[finalType].push({ x, y, z });
       }
 
-      // Gelände
       for (let x = startX; x < startX + CHUNK_SIZE; x++) {
         for (let z = startZ; z < startZ + CHUNK_SIZE; z++) {
           const height = terrainHeight(x, z);
 
           for (let y = 0; y <= height; y++) {
             let type = 'stone';
-
-            if (y === height) {
-              type = 'grass';
-            } else if (y >= height - 3) {
-              type = 'dirt';
-            }
-
+            if (y === height) type = 'grass';
+            else if (y >= height - 3) type = 'dirt';
             addBlock(x, y, z, type);
           }
 
-          // Bäume
           if (isTreePosition(x, z) && height >= 2) {
-            const trunkHeight =
-              4 + Math.floor(hash(x + 5, z + 5) * 2);
+            const trunkHeight = 4 + Math.floor(hash(x + 5, z + 5) * 2);
 
             for (let y = 1; y <= trunkHeight; y++) {
               addBlock(x, height + y, z, 'oak_log');
@@ -279,22 +284,10 @@ function Game() {
               for (let dz = -2; dz <= 2; dz++) {
                 for (let dy = -1; dy <= 2; dy++) {
                   const distance =
-                    Math.abs(dx) +
-                    Math.abs(dz) +
-                    Math.abs(dy) * 0.8;
+                    Math.abs(dx) + Math.abs(dz) + Math.abs(dy) * 0.8;
 
-                  if (distance <= 4.2) {
-                    const trunkPosition =
-                      dx === 0 && dz === 0 && dy <= 0;
-
-                    if (!trunkPosition) {
-                      addBlock(
-                        x + dx,
-                        crownY + dy,
-                        z + dz,
-                        'leaves'
-                      );
-                    }
+                  if (distance <= 4.2 && !(dx === 0 && dz === 0 && dy <= 0)) {
+                    addBlock(x + dx, crownY + dy, z + dz, 'leaves');
                   }
                 }
               }
@@ -303,7 +296,6 @@ function Game() {
         }
       }
 
-      // Platzierte Blöcke
       for (const [key, type] of placedBlocks.entries()) {
         const [x, y, z] = key.split(',').map(Number);
 
@@ -313,15 +305,9 @@ function Game() {
         ) {
           for (const list of Object.values(result)) {
             const index = list.findIndex(
-              block =>
-                block.x === x &&
-                block.y === y &&
-                block.z === z
+              b => b.x === x && b.y === y && b.z === z
             );
-
-            if (index !== -1) {
-              list.splice(index, 1);
-            }
+            if (index !== -1) list.splice(index, 1);
           }
 
           if (!removedBlocks.has(key) && result[type]) {
@@ -333,7 +319,13 @@ function Game() {
       return result;
     }
 
-    // Chunk aufbauen
+    function refreshChunkMeshes() {
+      chunkMeshes = [];
+      for (const chunk of chunks.values()) {
+        chunkMeshes.push(...chunk.meshes);
+      }
+    }
+
     function buildChunk(cx, cz) {
       const key = chunkKey(cx, cz);
       const oldChunk = chunks.get(key);
@@ -341,12 +333,9 @@ function Game() {
       if (oldChunk) {
         oldChunk.meshes.forEach(mesh => scene.remove(mesh));
 
-        for (const blockKeyValue of oldChunk.blockKeys) {
-          const entry = worldBlocks.get(blockKeyValue);
-
-          if (entry && entry.owner === key) {
-            worldBlocks.delete(blockKeyValue);
-          }
+        for (const positionKey of oldChunk.blockKeys) {
+          const entry = worldBlocks.get(positionKey);
+          if (entry && entry.owner === key) worldBlocks.delete(positionKey);
         }
       }
 
@@ -357,7 +346,6 @@ function Game() {
 
       for (const block of BLOCKS) {
         const positions = blocks[block.id];
-
         if (!positions || positions.length === 0) continue;
 
         const mesh = new THREE.InstancedMesh(
@@ -368,26 +356,16 @@ function Game() {
 
         mesh.castShadow = true;
         mesh.receiveShadow = true;
-
         mesh.userData.blocks = positions;
         mesh.userData.chunkKey = key;
         mesh.userData.blockType = block.id;
 
         positions.forEach((position, index) => {
-          dummy.position.set(
-            position.x,
-            position.y,
-            position.z
-          );
-
+          dummy.position.set(position.x, position.y, position.z);
           dummy.updateMatrix();
           mesh.setMatrixAt(index, dummy.matrix);
 
-          const positionKey = blockKey(
-            position.x,
-            position.y,
-            position.z
-          );
+          const positionKey = blockKey(position.x, position.y, position.z);
 
           worldBlocks.set(positionKey, {
             type: block.id,
@@ -399,57 +377,24 @@ function Game() {
 
         mesh.instanceMatrix.needsUpdate = true;
         mesh.computeBoundingSphere();
-
         scene.add(mesh);
         meshes.push(mesh);
       }
 
-      chunks.set(key, {
-        cx,
-        cz,
-        meshes,
-        blockKeys,
-      });
-
+      chunks.set(key, { cx, cz, meshes, blockKeys });
       refreshChunkMeshes();
     }
 
-    function refreshChunkMeshes() {
-      chunkMeshes = [];
-
-      for (const chunk of chunks.values()) {
-        chunkMeshes.push(...chunk.meshes);
-      }
-    }
-
-    // Chunks laden und entladen
     function updateChunks() {
-      const playerChunkX = Math.floor(
-        camera.position.x / CHUNK_SIZE
-      );
-
-      const playerChunkZ = Math.floor(
-        camera.position.z / CHUNK_SIZE
-      );
-
+      const px = Math.floor(camera.position.x / CHUNK_SIZE);
+      const pz = Math.floor(camera.position.z / CHUNK_SIZE);
       const needed = new Set();
 
-      for (
-        let x = playerChunkX - RENDER_DISTANCE;
-        x <= playerChunkX + RENDER_DISTANCE;
-        x++
-      ) {
-        for (
-          let z = playerChunkZ - RENDER_DISTANCE;
-          z <= playerChunkZ + RENDER_DISTANCE;
-          z++
-        ) {
+      for (let x = px - RENDER_DISTANCE; x <= px + RENDER_DISTANCE; x++) {
+        for (let z = pz - RENDER_DISTANCE; z <= pz + RENDER_DISTANCE; z++) {
           const key = chunkKey(x, z);
           needed.add(key);
-
-          if (!chunks.has(key)) {
-            buildChunk(x, z);
-          }
+          if (!chunks.has(key)) buildChunk(x, z);
         }
       }
 
@@ -459,10 +404,7 @@ function Game() {
 
           for (const positionKey of chunk.blockKeys) {
             const entry = worldBlocks.get(positionKey);
-
-            if (entry && entry.owner === key) {
-              worldBlocks.delete(positionKey);
-            }
+            if (entry && entry.owner === key) worldBlocks.delete(positionKey);
           }
 
           chunks.delete(key);
@@ -476,32 +418,24 @@ function Game() {
       const cx = Math.floor(x / CHUNK_SIZE);
       const cz = Math.floor(z / CHUNK_SIZE);
       const key = chunkKey(cx, cz);
-
-      if (chunks.has(key)) {
-        buildChunk(cx, cz);
-      }
+      if (chunks.has(key)) buildChunk(cx, cz);
     }
 
-    // Kollisionssystem
+    // Spielerkollision
     function collidesAt(x, y, z) {
       const minX = Math.floor(x - PLAYER_RADIUS + 0.5);
       const maxX = Math.floor(x + PLAYER_RADIUS + 0.5);
-
       const feet = y - EYE_HEIGHT;
       const head = feet + PLAYER_HEIGHT;
-
       const minY = Math.floor(feet + 0.5);
       const maxY = Math.floor(head + 0.5);
-
       const minZ = Math.floor(z - PLAYER_RADIUS + 0.5);
       const maxZ = Math.floor(z + PLAYER_RADIUS + 0.5);
 
       for (let bx = minX; bx <= maxX; bx++) {
         for (let by = minY; by <= maxY; by++) {
           for (let bz = minZ; bz <= maxZ; bz++) {
-            if (worldBlocks.has(blockKey(bx, by, bz))) {
-              return true;
-            }
+            if (worldBlocks.has(blockKey(bx, by, bz))) return true;
           }
         }
       }
@@ -512,184 +446,32 @@ function Game() {
     let verticalVelocity = 0;
     let canJump = false;
 
-    // Bewegung mit kleinen Schritten gegen Blockkollisionen
     function moveAxis(axis, amount) {
       if (amount === 0) return;
 
-      const steps = Math.max(
-        1,
-        Math.ceil(Math.abs(amount) / 0.08)
-      );
-
+      const steps = Math.max(1, Math.ceil(Math.abs(amount) / 0.08));
       const step = amount / steps;
 
       for (let i = 0; i < steps; i++) {
-        const nextX =
-          camera.position.x + (axis === 'x' ? step : 0);
-
-        const nextY =
-          camera.position.y + (axis === 'y' ? step : 0);
-
-        const nextZ =
-          camera.position.z + (axis === 'z' ? step : 0);
+        const nextX = camera.position.x + (axis === 'x' ? step : 0);
+        const nextY = camera.position.y + (axis === 'y' ? step : 0);
+        const nextZ = camera.position.z + (axis === 'z' ? step : 0);
 
         if (collidesAt(nextX, nextY, nextZ)) {
           if (axis === 'y') {
             verticalVelocity = 0;
-
-            if (step < 0) {
-              canJump = true;
-            }
+            if (step < 0) canJump = true;
           }
-
           return;
         }
 
         camera.position[axis] += step;
-
-        if (axis === 'y' && step < 0) {
-          canJump = false;
-        }
+        if (axis === 'y' && step < 0) canJump = false;
       }
     }
-
-    // Einheitlicher Spieler-Skin
-    const skinMaterials = {
-      skin: new THREE.MeshStandardMaterial({
-        color: 0xd5a078,
-        roughness: 1,
-      }),
-
-      hair: new THREE.MeshStandardMaterial({
-        color: 0x49301e,
-        roughness: 1,
-      }),
-
-      shirt: new THREE.MeshStandardMaterial({
-        color: 0x2865bd,
-        roughness: 1,
-      }),
-
-      pants: new THREE.MeshStandardMaterial({
-        color: 0x263b72,
-        roughness: 1,
-      }),
-
-      shoes: new THREE.MeshStandardMaterial({
-        color: 0x292929,
-        roughness: 1,
-      }),
-
-      eyes: new THREE.MeshStandardMaterial({
-        color: 0x252525,
-      }),
-    };
-
-    // Wiederverwendbares vollständiges Spielermodell
-    function createPlayerModel() {
-      const group = new THREE.Group();
-
-      function part(width, height, depth, material, x, y, z) {
-        const mesh = new THREE.Mesh(
-          new THREE.BoxGeometry(width, height, depth),
-          material
-        );
-
-        mesh.position.set(x, y, z);
-        mesh.castShadow = true;
-
-        group.add(mesh);
-        return mesh;
-      }
-
-      // Kopf
-      part(0.5, 0.5, 0.5, skinMaterials.skin, 0, 1.55, 0);
-
-      // Haare
-      part(0.52, 0.15, 0.52, skinMaterials.hair, 0, 1.87, 0);
-      part(0.12, 0.3, 0.52, skinMaterials.hair, -0.2, 1.7, 0);
-
-      // Augen
-      part(0.07, 0.07, 0.02, skinMaterials.eyes, -0.12, 1.58, -0.256);
-      part(0.07, 0.07, 0.02, skinMaterials.eyes, 0.12, 1.58, -0.256);
-
-      // Körper
-      part(0.55, 0.7, 0.3, skinMaterials.shirt, 0, 0.95, 0);
-
-      // Arme
-      part(0.23, 0.65, 0.25, skinMaterials.shirt, -0.4, 0.97, 0);
-      part(0.23, 0.65, 0.25, skinMaterials.shirt, 0.4, 0.97, 0);
-
-      // Hände
-      part(0.23, 0.2, 0.25, skinMaterials.skin, -0.4, 0.55, 0);
-      part(0.23, 0.2, 0.25, skinMaterials.skin, 0.4, 0.55, 0);
-
-      // Beine
-      part(0.25, 0.65, 0.28, skinMaterials.pants, -0.14, 0.27, 0);
-      part(0.25, 0.65, 0.28, skinMaterials.pants, 0.14, 0.27, 0);
-
-      // Schuhe
-      part(0.26, 0.16, 0.32, skinMaterials.shoes, -0.14, -0.13, -0.02);
-      part(0.26, 0.16, 0.32, skinMaterials.shoes, 0.14, -0.13, -0.02);
-
-      return group;
-    }
-
-    // Erstes vollständiges Spielermodell als Vorlage
-    // Wird in First Person nicht angezeigt.
-    const playerModel = createPlayerModel();
-    playerModel.visible = false;
-    scene.add(playerModel);
-
-    // Arme in der First-Person-Ansicht
-    const firstPersonArms = new THREE.Group();
-
-    const leftArm = new THREE.Mesh(
-      new THREE.BoxGeometry(0.22, 0.55, 0.22),
-      skinMaterials.shirt
-    );
-
-    leftArm.position.set(-0.32, -0.38, -0.58);
-    leftArm.rotation.z = 0.12;
-
-    const rightArm = new THREE.Mesh(
-      new THREE.BoxGeometry(0.22, 0.55, 0.22),
-      skinMaterials.shirt
-    );
-
-    rightArm.position.set(0.32, -0.38, -0.58);
-    rightArm.rotation.z = -0.12;
-
-    const leftHand = new THREE.Mesh(
-      new THREE.BoxGeometry(0.22, 0.18, 0.22),
-      skinMaterials.skin
-    );
-
-    leftHand.position.set(-0.32, -0.68, -0.58);
-
-    const rightHand = new THREE.Mesh(
-      new THREE.BoxGeometry(0.22, 0.18, 0.22),
-      skinMaterials.skin
-    );
-
-    rightHand.position.set(0.32, -0.68, -0.58);
-
-    firstPersonArms.add(
-      leftArm,
-      rightArm,
-      leftHand,
-      rightHand
-    );
-
-    camera.add(firstPersonArms);
 
     // Wasser
-    const waterGeometry = new THREE.PlaneGeometry(
-      1000,
-      1000,
-      100,
-      100
-    );
+    const waterGeometry = new THREE.PlaneGeometry(1000, 1000, 100, 100);
 
     const waterMaterial = new THREE.MeshStandardMaterial({
       color: 0x247da5,
@@ -704,11 +486,7 @@ function Game() {
 
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',
-        `
-          #include <common>
-          uniform float uTime;
-          varying float vWave;
-        `
+        '#include <common>\nuniform float uTime;\nvarying float vWave;'
       );
 
       shader.vertexShader = shader.vertexShader.replace(
@@ -726,10 +504,7 @@ function Game() {
 
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <common>',
-        `
-          #include <common>
-          varying float vWave;
-        `
+        '#include <common>\nvarying float vWave;'
       );
 
       shader.fragmentShader = shader.fragmentShader.replace(
@@ -746,23 +521,14 @@ function Game() {
       waterMaterial.userData.shader = shader;
     };
 
-    const water = new THREE.Mesh(
-      waterGeometry,
-      waterMaterial
-    );
-
+    const water = new THREE.Mesh(waterGeometry, waterMaterial);
     water.rotation.x = -Math.PI / 2;
     water.position.y = 1.2;
-
     scene.add(water);
 
-    // Spielerposition
-    camera.position.set(
-      0,
-      terrainHeight(0, 8) + EYE_HEIGHT + 0.5,
-      8
-    );
+    camera.position.set(0, terrainHeight(0, 8) + EYE_HEIGHT + 0.5, 8);
 
+    // Spielersteuerung
     const keys = {};
 
     function onKeyDown(event) {
@@ -770,6 +536,10 @@ function Game() {
 
       if (/^Digit[1-9]$/.test(event.code)) {
         chooseSlot(Number(event.code.slice(5)) - 1);
+      }
+
+      if (event.code === 'KeyE') {
+        setInventoryOpen(value => !value);
       }
     }
 
@@ -781,13 +551,13 @@ function Game() {
       Object.keys(keys).forEach(key => {
         keys[key] = false;
       });
+      movementRef.current = { x: 0, y: 0 };
+      jumpRef.current = false;
     }
 
     function onWheel(event) {
-      chooseSlot(
-        selectedSlotRef.current +
-        (event.deltaY > 0 ? 1 : -1)
-      );
+      if (mobilePlaying) return;
+      chooseSlot(selectedSlotRef.current + (event.deltaY > 0 ? 1 : -1));
     }
 
     window.addEventListener('keydown', onKeyDown);
@@ -795,36 +565,74 @@ function Game() {
     window.addEventListener('blur', onBlur);
     window.addEventListener('wheel', onWheel);
 
+    // Touch-Kamerasteuerung
+    function onTouchLookStart(event) {
+      if (!mobilePlaying) return;
+      if (event.target.closest('[data-touch-control]')) return;
+
+      lookPointerRef.current = {
+        id: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+      };
+    }
+
+    function onTouchLookMove(event) {
+      if (!mobilePlaying || !lookPointerRef.current) return;
+      if (lookPointerRef.current.id !== event.pointerId) return;
+
+      const dx = event.clientX - lookPointerRef.current.x;
+      const dy = event.clientY - lookPointerRef.current.y;
+
+      lookPointerRef.current.x = event.clientX;
+      lookPointerRef.current.y = event.clientY;
+
+      yaw -= dx * 0.004;
+      pitch -= dy * 0.004;
+      pitch = Math.max(-1.45, Math.min(1.45, pitch));
+
+      camera.rotation.order = 'YXZ';
+      camera.rotation.y = yaw;
+      camera.rotation.x = pitch;
+    }
+
+    function onTouchLookEnd(event) {
+      if (lookPointerRef.current?.id === event.pointerId) {
+        lookPointerRef.current = null;
+      }
+    }
+
+    mount.addEventListener('pointerdown', onTouchLookStart);
+    mount.addEventListener('pointermove', onTouchLookMove);
+    mount.addEventListener('pointerup', onTouchLookEnd);
+    mount.addEventListener('pointercancel', onTouchLookEnd);
+
     // Blöcke abbauen und platzieren
     const raycaster = new THREE.Raycaster();
     raycaster.far = REACH;
-
     const center = new THREE.Vector2(0, 0);
+
+    function isPlaying() {
+      return mobilePlaying || controls.isLocked;
+    }
 
     function getTargetBlock() {
       raycaster.setFromCamera(center, camera);
 
-      const hits = raycaster.intersectObjects(
-        chunkMeshes,
-        false
-      );
-
+      const hits = raycaster.intersectObjects(chunkMeshes, false);
       if (hits.length === 0) return null;
 
       const hit = hits[0];
-
       if (hit.instanceId === undefined) return null;
 
-      const block =
-        hit.object.userData.blocks[hit.instanceId];
-
+      const block = hit.object.userData.blocks[hit.instanceId];
       if (!block) return null;
 
       return { hit, block };
     }
 
     function mineBlock() {
-      if (!controls.isLocked) return;
+      if (!isPlaying()) return;
 
       const target = getTargetBlock();
       if (!target) return;
@@ -834,34 +642,24 @@ function Game() {
 
       removedBlocks.add(key);
       placedBlocks.delete(key);
-
       rebuildBlockChunk(block.x, block.z);
     }
 
     function placeBlock() {
-      if (!controls.isLocked) return;
+      if (!isPlaying()) return;
 
       const target = getTargetBlock();
       if (!target) return;
 
       const { hit, block } = target;
-
       if (!hit.face) return;
 
-      const normal = hit.face.normal
-        .clone()
-        .transformDirection(hit.object.matrixWorld);
+      const normal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
 
       const x = Math.round(block.x + normal.x);
       const y = Math.round(block.y + normal.y);
       const z = Math.round(block.z + normal.z);
-
       const key = blockKey(x, y, z);
-
-      // Keine Blöcke in den Spieler setzen
-      const testX = camera.position.x;
-      const testY = camera.position.y;
-      const testZ = camera.position.z;
 
       const existing = worldBlocks.get(key);
 
@@ -871,134 +669,103 @@ function Game() {
       });
 
       const overlapsPlayer = collidesAt(
-        testX,
-        testY,
-        testZ
+        camera.position.x,
+        camera.position.y,
+        camera.position.z
       );
 
-      if (existing) {
-        worldBlocks.set(key, existing);
-      } else {
-        worldBlocks.delete(key);
-      }
+      if (existing) worldBlocks.set(key, existing);
+      else worldBlocks.delete(key);
 
       if (overlapsPlayer) return;
 
       const type = BLOCKS[selectedSlotRef.current].id;
-
       removedBlocks.delete(key);
       placedBlocks.set(key, type);
-
       rebuildBlockChunk(x, z);
     }
 
-    function onMouseDown(event) {
-      if (event.button === 0) {
-        mineBlock();
-      }
+    actionRef.current.mine = mineBlock;
+    actionRef.current.place = placeBlock;
 
-      if (event.button === 2) {
-        placeBlock();
-      }
+    function onMouseDown(event) {
+      if (event.button === 0) mineBlock();
+      if (event.button === 2) placeBlock();
     }
 
     function onContextMenu(event) {
       event.preventDefault();
     }
 
-    renderer.domElement.addEventListener(
-      'mousedown',
-      onMouseDown
-    );
-
-    renderer.domElement.addEventListener(
-      'contextmenu',
-      onContextMenu
-    );
+    renderer.domElement.addEventListener('mousedown', onMouseDown);
+    renderer.domElement.addEventListener('contextmenu', onContextMenu);
 
     // Animation
     const clock = new THREE.Clock();
-
     let animationId;
     let previousChunkX = null;
     let previousChunkZ = null;
 
     function animate() {
       animationId = requestAnimationFrame(animate);
-
       const delta = Math.min(clock.getDelta(), 0.05);
 
-      if (controls.isLocked) {
+      if (isPlaying()) {
         const direction = new THREE.Vector3();
-
         camera.getWorldDirection(direction);
 
-        const forward = new THREE.Vector3(
-          direction.x,
-          0,
-          direction.z
-        ).normalize();
-
+        const forward = new THREE.Vector3(direction.x, 0, direction.z).normalize();
         const right = new THREE.Vector3()
-          .crossVectors(
-            forward,
-            new THREE.Vector3(0, 1, 0)
-          )
+          .crossVectors(forward, new THREE.Vector3(0, 1, 0))
           .normalize();
 
         let moveX = 0;
         let moveZ = 0;
 
-        if (keys.KeyW) {
-          moveX += forward.x;
-          moveZ += forward.z;
+        if (mobilePlaying) {
+          const input = movementRef.current;
+          moveX += forward.x * -input.y + right.x * input.x;
+          moveZ += forward.z * -input.y + right.z * input.x;
+        } else {
+          if (keys.KeyW) {
+            moveX += forward.x;
+            moveZ += forward.z;
+          }
+          if (keys.KeyS) {
+            moveX -= forward.x;
+            moveZ -= forward.z;
+          }
+          if (keys.KeyA) {
+            moveX -= right.x;
+            moveZ -= right.z;
+          }
+          if (keys.KeyD) {
+            moveX += right.x;
+            moveZ += right.z;
+          }
         }
 
-        if (keys.KeyS) {
-          moveX -= forward.x;
-          moveZ -= forward.z;
-        }
-
-        if (keys.KeyA) {
-          moveX -= right.x;
-          moveZ -= right.z;
-        }
-
-        if (keys.KeyD) {
-          moveX += right.x;
-          moveZ += right.z;
-        }
-
-        const moveLength = Math.sqrt(
-          moveX * moveX + moveZ * moveZ
-        );
+        const moveLength = Math.sqrt(moveX * moveX + moveZ * moveZ);
 
         if (moveLength > 0) {
-          moveX /= moveLength;
-          moveZ /= moveLength;
+          moveX /= Math.max(1, moveLength);
+          moveZ /= Math.max(1, moveLength);
 
           moveAxis('x', moveX * MOVE_SPEED * delta);
           moveAxis('z', moveZ * MOVE_SPEED * delta);
         }
 
-        if (keys.Space && canJump) {
+        if ((keys.Space || jumpRef.current) && canJump) {
           verticalVelocity = JUMP_STRENGTH;
           canJump = false;
         }
 
         verticalVelocity -= GRAVITY * delta;
-
         moveAxis('y', verticalVelocity * delta);
       }
 
-      // Chunks aktualisieren
-      const currentChunkX = Math.floor(
-        camera.position.x / CHUNK_SIZE
-      );
-
-      const currentChunkZ = Math.floor(
-        camera.position.z / CHUNK_SIZE
-      );
+      const currentChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
+      const currentChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
 
       if (
         currentChunkX !== previousChunkX ||
@@ -1006,7 +773,6 @@ function Game() {
       ) {
         previousChunkX = currentChunkX;
         previousChunkZ = currentChunkZ;
-
         updateChunks();
       }
 
@@ -1014,62 +780,41 @@ function Game() {
       water.position.z = camera.position.z;
 
       if (waterMaterial.userData.shader) {
-        waterMaterial.userData.shader.uniforms.uTime.value =
-          clock.elapsedTime;
+        waterMaterial.userData.shader.uniforms.uTime.value = clock.elapsedTime;
       }
 
       renderer.render(scene, camera);
     }
 
-    // Start
     updateChunks();
 
-    previousChunkX = Math.floor(
-      camera.position.x / CHUNK_SIZE
-    );
-
-    previousChunkZ = Math.floor(
-      camera.position.z / CHUNK_SIZE
-    );
+    previousChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
+    previousChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
 
     animate();
 
-    // Fenstergröße
     function onResize() {
-      camera.aspect =
-        window.innerWidth / window.innerHeight;
-
+      camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
-
-      renderer.setSize(
-        window.innerWidth,
-        window.innerHeight
-      );
+      renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
     window.addEventListener('resize', onResize);
 
-    // Aufräumen
     return () => {
       cancelAnimationFrame(animationId);
 
       controls.unlock();
       controls.dispose();
 
-      renderer.domElement.removeEventListener(
-        'click',
-        onCanvasClick
-      );
+      renderer.domElement.removeEventListener('click', onCanvasClick);
+      renderer.domElement.removeEventListener('mousedown', onMouseDown);
+      renderer.domElement.removeEventListener('contextmenu', onContextMenu);
 
-      renderer.domElement.removeEventListener(
-        'mousedown',
-        onMouseDown
-      );
-
-      renderer.domElement.removeEventListener(
-        'contextmenu',
-        onContextMenu
-      );
+      mount.removeEventListener('pointerdown', onTouchLookStart);
+      mount.removeEventListener('pointermove', onTouchLookMove);
+      mount.removeEventListener('pointerup', onTouchLookEnd);
+      mount.removeEventListener('pointercancel', onTouchLookEnd);
 
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
@@ -1077,49 +822,63 @@ function Game() {
       window.removeEventListener('wheel', onWheel);
       window.removeEventListener('resize', onResize);
 
-      for (const chunk of chunks.values()) {
+      chunks.forEach(chunk => {
         chunk.meshes.forEach(mesh => scene.remove(mesh));
-      }
+      });
 
       scene.remove(water);
-      scene.remove(playerModel);
-
-      camera.remove(firstPersonArms);
 
       cubeGeometry.dispose();
       waterGeometry.dispose();
-
-      Object.values(textures).forEach(texture => {
-        texture.dispose();
-      });
-
-      Object.values(materials).forEach(material => {
-        material.dispose();
-      });
-
-      Object.values(skinMaterials).forEach(material => {
-        material.dispose();
-      });
-
-      firstPersonArms.traverse(object => {
-        if (object.geometry) object.geometry.dispose();
-      });
-
-      playerModel.traverse(object => {
-        if (object.geometry) object.geometry.dispose();
-      });
-
       waterMaterial.dispose();
+
+      Object.values(textures).forEach(texture => texture.dispose());
+      Object.values(materials).forEach(material => material.dispose());
 
       renderer.dispose();
 
       if (mount.contains(renderer.domElement)) {
         mount.removeChild(renderer.domElement);
       }
+
+      actionRef.current = {};
     };
   }, []);
 
   const visibleBlocks = BLOCKS.slice(0, HOTBAR_SIZE);
+
+  function startJoystick(event) {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    updateJoystick(event);
+  }
+
+  function updateJoystick(event) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    let dx = event.clientX - centerX;
+    let dy = event.clientY - centerY;
+
+    const max = rect.width * 0.34;
+    const length = Math.sqrt(dx * dx + dy * dy);
+
+    if (length > max) {
+      dx = (dx / length) * max;
+      dy = (dy / length) * max;
+    }
+
+    const x = dx / max;
+    const y = dy / max;
+
+    movementRef.current = { x, y };
+    setJoystick({ x: dx, y: dy });
+  }
+
+  function stopJoystick() {
+    movementRef.current = { x: 0, y: 0 };
+    setJoystick({ x: 0, y: 0 });
+  }
 
   return (
     <div
@@ -1129,7 +888,9 @@ function Game() {
         inset: 0,
         overflow: 'hidden',
         background: '#87b8d8',
-        cursor: 'crosshair',
+        cursor: isMobile ? 'default' : 'crosshair',
+        touchAction: 'none',
+        userSelect: 'none',
       }}
     >
       {/* Fadenkreuz */}
@@ -1152,62 +913,56 @@ function Game() {
 
       {/* Hotbar */}
       <div
+        data-touch-control
         style={{
           position: 'absolute',
-          bottom: 24,
+          bottom: isMobile ? 12 : 24,
           left: '50%',
           transform: 'translateX(-50%)',
           display: 'flex',
-          gap: 5,
-          padding: 8,
+          gap: isMobile ? 2 : 5,
+          padding: 6,
           borderRadius: 8,
-          background: 'rgba(15, 15, 15, 0.72)',
+          background: 'rgba(15,15,15,0.72)',
           zIndex: 5,
-          pointerEvents: 'auto',
           maxWidth: '95vw',
+          overflowX: 'auto',
         }}
       >
         {visibleBlocks.map((block, index) => (
           <button
             key={block.id}
             onClick={() => chooseSlot(index)}
-            title={`${index + 1}: ${block.name}`}
             style={{
-              width: 48,
-              height: 48,
-              minWidth: 0,
-              padding: 5,
+              width: isMobile ? 34 : 48,
+              height: isMobile ? 38 : 48,
+              minWidth: isMobile ? 34 : 48,
+              padding: 4,
               borderRadius: 5,
-              border:
-                selectedSlot === index
-                  ? '3px solid white'
-                  : '2px solid #777',
-              background:
-                selectedSlot === index
-                  ? 'rgba(255,255,255,0.25)'
-                  : 'rgba(0,0,0,0.45)',
-              cursor: 'pointer',
+              border: selectedSlot === index ? '3px solid white' : '2px solid #777',
+              background: selectedSlot === index
+                ? 'rgba(255,255,255,0.25)'
+                : 'rgba(0,0,0,0.45)',
               position: 'relative',
+              touchAction: 'manipulation',
             }}
           >
             <div
               style={{
-                width: 25,
-                height: 25,
+                width: isMobile ? 19 : 25,
+                height: isMobile ? 19 : 25,
                 margin: 'auto',
                 background: block.color,
                 border: '2px solid rgba(0,0,0,0.25)',
-                boxShadow: 'inset -4px -4px rgba(0,0,0,0.15)',
               }}
             />
-
             <span
               style={{
                 position: 'absolute',
                 bottom: 1,
                 right: 4,
                 color: 'white',
-                fontSize: 10,
+                fontSize: 9,
                 fontFamily: 'Arial',
               }}
             >
@@ -1221,7 +976,7 @@ function Game() {
       <div
         style={{
           position: 'absolute',
-          bottom: 88,
+          bottom: isMobile ? 58 : 88,
           left: '50%',
           transform: 'translateX(-50%)',
           color: 'white',
@@ -1234,6 +989,225 @@ function Game() {
       >
         {BLOCKS[selectedSlot].name}
       </div>
+
+      {/* Inventar öffnen */}
+      <button
+        data-touch-control
+        onClick={() => setInventoryOpen(value => !value)}
+        style={{
+          position: 'absolute',
+          top: 18,
+          right: 18,
+          zIndex: 12,
+          padding: '11px 16px',
+          color: 'white',
+          background: 'rgba(15,15,15,0.78)',
+          border: '1px solid rgba(255,255,255,0.5)',
+          borderRadius: 8,
+          fontSize: 15,
+          fontWeight: 'bold',
+          cursor: 'pointer',
+        }}
+      >
+        INVENTAR
+      </button>
+
+      {/* Mobile Steuerung */}
+      {isMobile && (
+        <>
+          {/* Joystick */}
+          <div
+            data-touch-control
+            onPointerDown={startJoystick}
+            onPointerMove={event => {
+              if (event.buttons) updateJoystick(event);
+            }}
+            onPointerUp={stopJoystick}
+            onPointerCancel={stopJoystick}
+            style={{
+              position: 'absolute',
+              bottom: 95,
+              left: 28,
+              width: 128,
+              height: 128,
+              borderRadius: '50%',
+              background: 'rgba(20,20,20,0.38)',
+              border: '2px solid rgba(255,255,255,0.55)',
+              zIndex: 10,
+              touchAction: 'none',
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                width: 52,
+                height: 52,
+                borderRadius: '50%',
+                background: 'rgba(255,255,255,0.65)',
+                border: '2px solid white',
+                left: '50%',
+                top: '50%',
+                transform: `translate(calc(-50% + ${joystick.x}px), calc(-50% + ${joystick.y}px))`,
+                pointerEvents: 'none',
+              }}
+            />
+          </div>
+
+          {/* Aktionsknöpfe */}
+          <div
+            data-touch-control
+            style={{
+              position: 'absolute',
+              right: 20,
+              bottom: 100,
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, 62px)',
+              gap: 10,
+              zIndex: 10,
+            }}
+          >
+            <button
+              onPointerDown={event => {
+                event.preventDefault();
+                actionRef.current.mine?.();
+              }}
+              style={touchButtonStyle}
+            >
+              ABBauen
+            </button>
+
+            <button
+              onPointerDown={event => {
+                event.preventDefault();
+                actionRef.current.place?.();
+              }}
+              style={touchButtonStyle}
+            >
+              Bauen
+            </button>
+
+            <button
+              onPointerDown={event => {
+                event.preventDefault();
+                jumpRef.current = true;
+              }}
+              onPointerUp={() => { jumpRef.current = false; }}
+              onPointerCancel={() => { jumpRef.current = false; }}
+              style={{
+                ...touchButtonStyle,
+                gridColumn: 'span 2',
+                width: 134,
+              }}
+            >
+              SPRINGEN
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Inventarfenster */}
+      {inventoryOpen && (
+        <div
+          data-touch-control
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 20,
+            background: 'rgba(0,0,0,0.78)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              width: 'min(720px, 95vw)',
+              maxHeight: '85vh',
+              background: '#292929',
+              border: '2px solid #777',
+              borderRadius: 12,
+              padding: 18,
+              color: 'white',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 14,
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <h2 style={{ margin: 0, fontFamily: 'Arial' }}>
+                INVENTAR – {BLOCKS.length} BLÖCKE
+              </h2>
+
+              <button
+                onClick={() => setInventoryOpen(false)}
+                style={closeButtonStyle}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(85px, 1fr))',
+                gap: 8,
+                overflowY: 'auto',
+                padding: 4,
+              }}
+            >
+              {BLOCKS.map((block, index) => (
+                <button
+                  key={block.id}
+                  onClick={() => {
+                    chooseSlot(index);
+                    setInventoryOpen(false);
+                  }}
+                  style={{
+                    minHeight: 76,
+                    padding: 7,
+                    background: selectedSlot === index ? '#526b8c' : '#414141',
+                    border: selectedSlot === index
+                      ? '2px solid white'
+                      : '1px solid #777',
+                    borderRadius: 7,
+                    color: 'white',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 5,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 29,
+                      height: 29,
+                      background: block.color,
+                      border: '2px solid rgba(0,0,0,0.3)',
+                      boxShadow: 'inset -4px -4px rgba(0,0,0,0.15)',
+                    }}
+                  />
+                  <span style={{ fontSize: 10, fontFamily: 'Arial' }}>
+                    {block.name}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div style={{ fontSize: 12, color: '#bbb', fontFamily: 'Arial' }}>
+              Wähle einen Block aus, um ihn in deine Hotbar zu übernehmen.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Branding */}
       <div
@@ -1254,5 +1228,28 @@ function Game() {
     </div>
   );
 }
+
+const touchButtonStyle = {
+  width: 62,
+  height: 62,
+  borderRadius: 12,
+  background: 'rgba(20,20,20,0.72)',
+  color: 'white',
+  border: '2px solid rgba(255,255,255,0.7)',
+  fontSize: 10,
+  fontWeight: 'bold',
+  touchAction: 'none',
+};
+
+const closeButtonStyle = {
+  width: 34,
+  height: 34,
+  borderRadius: 7,
+  background: '#555',
+  color: 'white',
+  border: '1px solid #aaa',
+  fontSize: 18,
+  cursor: 'pointer',
+};
 
 export default Game;
