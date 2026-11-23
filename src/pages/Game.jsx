@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 
+const SERVER_URL = 'wss://einefichte-minecraft.henr-bra-919.workers.dev';
+
 const BLOCKS = [
   { id: 'grass', name: 'Gras', color: '#579447' },
   { id: 'dirt', name: 'Erde', color: '#795338' },
@@ -21,7 +23,6 @@ const BLOCKS = [
   { id: 'oak_log', name: 'Eichenstamm', color: '#966033' },
   { id: 'moss', name: 'Moos', color: '#527d42' },
 
-  // 30 neue Dekoblöcke
   { id: 'glass_blue', name: 'Blaues Glas', color: '#62a9df' },
   { id: 'glass_green', name: 'Grünes Glas', color: '#65bd83' },
   { id: 'glass_purple', name: 'Lila Glas', color: '#a77bd4' },
@@ -62,18 +63,55 @@ function Game() {
   const movementRef = useRef({ x: 0, y: 0 });
   const jumpRef = useRef(false);
   const lookPointerRef = useRef(null);
+  const selectedSlotRef = useRef(0);
 
   const [selectedSlot, setSelectedSlot] = useState(0);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [joystick, setJoystick] = useState({ x: 0, y: 0 });
 
-  const selectedSlotRef = useRef(0);
+  const [roomName, setRoomName] = useState('');
+  const [gameStarted, setGameStarted] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  const [connectionMessage, setConnectionMessage] = useState('');
+  const [playerCount, setPlayerCount] = useState(1);
+
+  const socketRef = useRef(null);
 
   function chooseSlot(index) {
     const next = (index + BLOCKS.length) % BLOCKS.length;
     selectedSlotRef.current = next;
     setSelectedSlot(next);
+  }
+
+  function enterRoom(event) {
+    event.preventDefault();
+
+    const cleanName = roomName.trim();
+
+    if (!/^[a-zA-Z0-9_-]{1,40}$/.test(cleanName)) {
+      setConnectionMessage(
+        'Bitte verwende 1–40 Zeichen: Buchstaben, Zahlen, _ oder -.'
+      );
+      return;
+    }
+
+    setRoomName(cleanName);
+    setConnectionMessage('');
+    setConnectionStatus('connecting');
+    setGameStarted(true);
+  }
+
+  function leaveRoom() {
+    socketRef.current?.close();
+    socketRef.current = null;
+    setGameStarted(false);
+    setConnectionStatus('disconnected');
+    setConnectionMessage('');
+    setPlayerCount(1);
+    setInventoryOpen(false);
+    movementRef.current = { x: 0, y: 0 };
+    jumpRef.current = false;
   }
 
   useEffect(() => {
@@ -91,6 +129,8 @@ function Game() {
   }, []);
 
   useEffect(() => {
+    if (!gameStarted) return;
+
     const mount = mountRef.current;
     if (!mount) return;
 
@@ -144,7 +184,6 @@ function Game() {
 
     renderer.domElement.addEventListener('click', onCanvasClick);
 
-    // Beleuchtung
     scene.add(new THREE.HemisphereLight(0xc4ddff, 0x42502c, 2));
 
     const sun = new THREE.DirectionalLight(0xffe5b5, 3);
@@ -157,7 +196,6 @@ function Game() {
     sun.shadow.camera.bottom = -40;
     scene.add(sun);
 
-    // Blocktexturen
     function createTexture(baseColor, detailColor, detail = 700) {
       const size = 128;
       const canvas = document.createElement('canvas');
@@ -216,7 +254,6 @@ function Game() {
 
     const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
 
-    // Welt
     function terrainHeight(x, z) {
       const a = Math.sin(x * 0.12) * 2;
       const b = Math.cos(z * 0.14) * 2;
@@ -421,7 +458,204 @@ function Game() {
       if (chunks.has(key)) buildChunk(cx, cz);
     }
 
-    // Spielerkollision
+    // Multiplayer
+    let playerId = null;
+    let socket = null;
+    let lastMoveSent = 0;
+    const remotePlayers = new Map();
+
+    function sendMessage(message) {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify(message));
+      }
+    }
+
+    function makeRemotePlayer(id) {
+      const group = new THREE.Group();
+
+      const colorSeed = [...String(id)].reduce(
+        (sum, char) => sum + char.charCodeAt(0),
+        0
+      );
+
+      const shirtColor = new THREE.Color().setHSL(
+        (colorSeed % 360) / 360,
+        0.55,
+        0.48
+      );
+
+      const skinMaterial = new THREE.MeshStandardMaterial({
+        color: 0xe0b38b,
+      });
+
+      const shirtMaterial = new THREE.MeshStandardMaterial({
+        color: shirtColor,
+      });
+
+      const pantsMaterial = new THREE.MeshStandardMaterial({
+        color: 0x34445f,
+      });
+
+      function part(width, height, depth, y, material, x = 0) {
+        const mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(width, height, depth),
+          material
+        );
+        mesh.position.set(x, y, 0);
+        mesh.castShadow = true;
+        group.add(mesh);
+      }
+
+      part(0.65, 0.85, 0.35, 1.22, shirtMaterial);
+      part(0.48, 0.48, 0.48, 1.9, skinMaterial);
+      part(0.22, 0.8, 0.25, 1.22, shirtMaterial, -0.44);
+      part(0.22, 0.8, 0.25, 1.22, shirtMaterial, 0.44);
+      part(0.27, 0.8, 0.28, 0.4, pantsMaterial, -0.17);
+      part(0.27, 0.8, 0.28, 0.4, pantsMaterial, 0.17);
+
+      scene.add(group);
+      remotePlayers.set(id, group);
+      return group;
+    }
+
+    function updateRemotePlayer(player) {
+      if (!player || player.id === playerId) return;
+
+      const group = remotePlayers.get(player.id) ||
+        makeRemotePlayer(player.id);
+
+      group.position.set(
+        Number(player.x) || 0,
+        (Number(player.y) || 0) - EYE_HEIGHT,
+        Number(player.z) || 0
+      );
+
+      group.rotation.y = Number(player.yaw) || 0;
+    }
+
+    function removeRemotePlayer(id) {
+      const group = remotePlayers.get(id);
+      if (!group) return;
+
+      scene.remove(group);
+      group.traverse(object => {
+        if (object.geometry) object.geometry.dispose();
+        if (object.material) object.material.dispose();
+      });
+
+      remotePlayers.delete(id);
+    }
+
+    function applyNetworkBlock(data) {
+      if (!data || !Number.isFinite(Number(data.x)) ||
+          !Number.isFinite(Number(data.y)) ||
+          !Number.isFinite(Number(data.z))) return;
+
+      const x = Math.round(Number(data.x));
+      const y = Math.round(Number(data.y));
+      const z = Math.round(Number(data.z));
+      const key = blockKey(x, y, z);
+      const type = data.block;
+
+      if (type === 'air' || type === null) {
+        removedBlocks.add(key);
+        placedBlocks.delete(key);
+      } else if (BLOCKS.some(block => block.id === type)) {
+        removedBlocks.delete(key);
+        placedBlocks.set(key, type);
+      } else {
+        return;
+      }
+
+      rebuildBlockChunk(x, z);
+    }
+
+    function connectToRoom() {
+      try {
+        socket = new WebSocket(
+          `${SERVER_URL}/room/${encodeURIComponent(roomName)}`
+        );
+
+        socketRef.current = socket;
+
+        socket.addEventListener('open', () => {
+          setConnectionStatus('connected');
+          setConnectionMessage('Mit dem Raumserver verbunden.');
+        });
+
+        socket.addEventListener('message', event => {
+          let data;
+
+          try {
+            data = JSON.parse(event.data);
+          } catch {
+            return;
+          }
+
+          if (data.type === 'welcome') {
+            playerId = data.playerId;
+
+            if (Array.isArray(data.players)) {
+              data.players.forEach(player => updateRemotePlayer(player));
+              setPlayerCount(Math.min(5, data.players.length + 1));
+            }
+
+            if (Array.isArray(data.blocks)) {
+              data.blocks.forEach(block => applyNetworkBlock(block));
+              updateChunks();
+            }
+
+            setConnectionStatus('connected');
+            setConnectionMessage('Du bist im Raum.');
+          }
+
+          if (data.type === 'player-joined') {
+            updateRemotePlayer(data.player);
+            setPlayerCount(count => Math.min(5, count + 1));
+          }
+
+          if (data.type === 'player-moved') {
+            updateRemotePlayer(data.player);
+          }
+
+          if (data.type === 'player-left') {
+            removeRemotePlayer(data.playerId);
+            setPlayerCount(count => Math.max(1, count - 1));
+          }
+
+          if (data.type === 'block-changed') {
+            if (data.playerId !== playerId) {
+              applyNetworkBlock(data);
+            }
+          }
+
+          if (data.type === 'error') {
+            setConnectionMessage(
+              data.message || 'Der Server hat einen Fehler gemeldet.'
+            );
+          }
+        });
+
+        socket.addEventListener('error', () => {
+          setConnectionStatus('error');
+          setConnectionMessage(
+            'Verbindung fehlgeschlagen. Prüfe, ob der Cloudflare-Server läuft.'
+          );
+        });
+
+        socket.addEventListener('close', () => {
+          setConnectionStatus('disconnected');
+          setConnectionMessage('Verbindung zum Raumserver getrennt.');
+          setPlayerCount(1);
+          remotePlayers.forEach((_, id) => removeRemotePlayer(id));
+        });
+      } catch {
+        setConnectionStatus('error');
+        setConnectionMessage('Der Raum konnte nicht geöffnet werden.');
+      }
+    }
+
+    // Spielersteuerung
     function collidesAt(x, y, z) {
       const minX = Math.floor(x - PLAYER_RADIUS + 0.5);
       const maxX = Math.floor(x + PLAYER_RADIUS + 0.5);
@@ -528,7 +762,7 @@ function Game() {
 
     camera.position.set(0, terrainHeight(0, 8) + EYE_HEIGHT + 0.5, 8);
 
-    // Spielersteuerung
+    // Tastatur
     const keys = {};
 
     function onKeyDown(event) {
@@ -607,7 +841,7 @@ function Game() {
     mount.addEventListener('pointerup', onTouchLookEnd);
     mount.addEventListener('pointercancel', onTouchLookEnd);
 
-    // Blöcke abbauen und platzieren
+    // Abbauen und Bauen
     const raycaster = new THREE.Raycaster();
     raycaster.far = REACH;
     const center = new THREE.Vector2(0, 0);
@@ -643,6 +877,14 @@ function Game() {
       removedBlocks.add(key);
       placedBlocks.delete(key);
       rebuildBlockChunk(block.x, block.z);
+
+      sendMessage({
+        type: 'block',
+        x: block.x,
+        y: block.y,
+        z: block.z,
+        block: 'air',
+      });
     }
 
     function placeBlock() {
@@ -683,6 +925,14 @@ function Game() {
       removedBlocks.delete(key);
       placedBlocks.set(key, type);
       rebuildBlockChunk(x, z);
+
+      sendMessage({
+        type: 'block',
+        x,
+        y,
+        z,
+        block: type,
+      });
     }
 
     actionRef.current.mine = mineBlock;
@@ -764,6 +1014,27 @@ function Game() {
         moveAxis('y', verticalVelocity * delta);
       }
 
+      // Spielerposition alle 100 ms an den Server senden
+      const now = performance.now();
+
+      if (
+        socket &&
+        socket.readyState === WebSocket.OPEN &&
+        playerId &&
+        now - lastMoveSent >= 100
+      ) {
+        lastMoveSent = now;
+
+        sendMessage({
+          type: 'move',
+          x: camera.position.x,
+          y: camera.position.y,
+          z: camera.position.z,
+          yaw: camera.rotation.y,
+          pitch: camera.rotation.x,
+        });
+      }
+
       const currentChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
       const currentChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
 
@@ -791,6 +1062,7 @@ function Game() {
     previousChunkX = Math.floor(camera.position.x / CHUNK_SIZE);
     previousChunkZ = Math.floor(camera.position.z / CHUNK_SIZE);
 
+    connectToRoom();
     animate();
 
     function onResize() {
@@ -803,6 +1075,14 @@ function Game() {
 
     return () => {
       cancelAnimationFrame(animationId);
+
+      if (socket) {
+        socket.close();
+      }
+
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
 
       controls.unlock();
       controls.dispose();
@@ -826,6 +1106,14 @@ function Game() {
         chunk.meshes.forEach(mesh => scene.remove(mesh));
       });
 
+      remotePlayers.forEach(group => {
+        scene.remove(group);
+        group.traverse(object => {
+          if (object.geometry) object.geometry.dispose();
+          if (object.material) object.material.dispose();
+        });
+      });
+
       scene.remove(water);
 
       cubeGeometry.dispose();
@@ -843,7 +1131,7 @@ function Game() {
 
       actionRef.current = {};
     };
-  }, []);
+  }, [gameStarted, roomName]);
 
   const visibleBlocks = BLOCKS.slice(0, HOTBAR_SIZE);
 
@@ -880,6 +1168,133 @@ function Game() {
     setJoystick({ x: 0, y: 0 });
   }
 
+  // Raum-Auswahl
+  if (!gameStarted) {
+    return (
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background:
+            'radial-gradient(circle at top, #315d45 0%, #17251d 55%, #101713 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 20,
+          fontFamily: 'Arial, sans-serif',
+          color: 'white',
+        }}
+      >
+        <form
+          onSubmit={enterRoom}
+          style={{
+            width: 'min(440px, 100%)',
+            padding: 30,
+            borderRadius: 18,
+            background: 'rgba(15, 25, 19, 0.94)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            boxShadow: '0 20px 70px rgba(0,0,0,0.45)',
+            textAlign: 'center',
+          }}
+        >
+          <div style={{ fontSize: 48, marginBottom: 8 }}>🌲</div>
+
+          <h1
+            style={{
+              margin: '0 0 8px',
+              fontSize: 32,
+              letterSpacing: 2,
+            }}
+          >
+            EINEFICHTE
+          </h1>
+
+          <p style={{ color: '#a9c4ad', marginBottom: 28 }}>
+            MINI MINECRAFT MULTIPLAYER
+          </p>
+
+          <label
+            htmlFor="room-name"
+            style={{
+              display: 'block',
+              textAlign: 'left',
+              marginBottom: 9,
+              fontWeight: 'bold',
+            }}
+          >
+            Name deines privaten Raums
+          </label>
+
+          <input
+            id="room-name"
+            value={roomName}
+            onChange={event => setRoomName(event.target.value)}
+            placeholder="z. B. Fichtenwald"
+            maxLength={40}
+            autoComplete="off"
+            style={{
+              width: '100%',
+              boxSizing: 'border-box',
+              padding: 14,
+              borderRadius: 8,
+              border: '1px solid #65816b',
+              background: '#202e24',
+              color: 'white',
+              fontSize: 16,
+              outline: 'none',
+              marginBottom: 16,
+            }}
+          />
+
+          <button
+            type="submit"
+            style={{
+              width: '100%',
+              padding: 15,
+              border: 'none',
+              borderRadius: 8,
+              background: '#4c965c',
+              color: 'white',
+              fontSize: 16,
+              fontWeight: 'bold',
+              cursor: 'pointer',
+            }}
+          >
+            RAUM ERSTELLEN / BEITRETEN
+          </button>
+
+          {connectionMessage && (
+            <p
+              style={{
+                color: '#ffbd86',
+                fontSize: 13,
+                lineHeight: 1.5,
+                marginTop: 16,
+              }}
+            >
+              {connectionMessage}
+            </p>
+          )}
+
+          <div
+            style={{
+              marginTop: 22,
+              color: '#9bad9e',
+              fontSize: 12,
+              lineHeight: 1.7,
+            }}
+          >
+            Teile den Raumnamen mit deinen Freunden.
+            <br />
+            Jeder mit demselben Namen kann beitreten.
+            <br />
+            Bis zu 5 Spieler pro Raum.
+          </div>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div
       ref={mountRef}
@@ -893,6 +1308,71 @@ function Game() {
         userSelect: 'none',
       }}
     >
+      {/* Raumstatus */}
+      <div
+        data-touch-control
+        style={{
+          position: 'absolute',
+          top: 14,
+          left: 14,
+          zIndex: 12,
+          padding: '9px 13px',
+          borderRadius: 8,
+          background: 'rgba(15,15,15,0.76)',
+          color: 'white',
+          fontFamily: 'Arial',
+          fontSize: 12,
+          lineHeight: 1.6,
+          pointerEvents: 'none',
+        }}
+      >
+        <div>
+          <strong>Raum:</strong> {roomName}
+        </div>
+        <div>
+          <strong>Spieler:</strong> {playerCount}/5
+        </div>
+        <div
+          style={{
+            color:
+              connectionStatus === 'connected'
+                ? '#80e69a'
+                : connectionStatus === 'error'
+                  ? '#ff8585'
+                  : '#ffd27b',
+          }}
+        >
+          {connectionStatus === 'connected'
+            ? 'Verbunden'
+            : connectionStatus === 'connecting'
+              ? 'Verbinde ...'
+              : connectionStatus === 'error'
+                ? 'Verbindungsfehler'
+                : 'Getrennt'}
+        </div>
+      </div>
+
+      {/* Raum verlassen */}
+      <button
+        data-touch-control
+        onClick={leaveRoom}
+        style={{
+          position: 'absolute',
+          top: 14,
+          right: 14,
+          zIndex: 13,
+          padding: '9px 12px',
+          borderRadius: 8,
+          background: 'rgba(15,15,15,0.78)',
+          color: 'white',
+          border: '1px solid rgba(255,255,255,0.5)',
+          cursor: 'pointer',
+          fontWeight: 'bold',
+        }}
+      >
+        RAUM VERLASSEN
+      </button>
+
       {/* Fadenkreuz */}
       <div
         style={{
@@ -939,7 +1419,9 @@ function Game() {
               minWidth: isMobile ? 34 : 48,
               padding: 4,
               borderRadius: 5,
-              border: selectedSlot === index ? '3px solid white' : '2px solid #777',
+              border: selectedSlot === index
+                ? '3px solid white'
+                : '2px solid #777',
               background: selectedSlot === index
                 ? 'rgba(255,255,255,0.25)'
                 : 'rgba(0,0,0,0.45)',
@@ -996,8 +1478,8 @@ function Game() {
         onClick={() => setInventoryOpen(value => !value)}
         style={{
           position: 'absolute',
-          top: 18,
-          right: 18,
+          top: 90,
+          right: 14,
           zIndex: 12,
           padding: '11px 16px',
           color: 'white',
@@ -1015,7 +1497,6 @@ function Game() {
       {/* Mobile Steuerung */}
       {isMobile && (
         <>
-          {/* Joystick */}
           <div
             data-touch-control
             onPointerDown={startJoystick}
@@ -1053,7 +1534,6 @@ function Game() {
             />
           </div>
 
-          {/* Aktionsknöpfe */}
           <div
             data-touch-control
             style={{
@@ -1091,8 +1571,12 @@ function Game() {
                 event.preventDefault();
                 jumpRef.current = true;
               }}
-              onPointerUp={() => { jumpRef.current = false; }}
-              onPointerCancel={() => { jumpRef.current = false; }}
+              onPointerUp={() => {
+                jumpRef.current = false;
+              }}
+              onPointerCancel={() => {
+                jumpRef.current = false;
+              }}
               style={{
                 ...touchButtonStyle,
                 gridColumn: 'span 2',
